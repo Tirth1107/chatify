@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatify</title>
+    <style>
+        /* Global Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
+            background-color: #f4f6f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            flex-direction: column;
+        }
+        
+        /* Chat Container */
+        .chat-container {
+            width: 100%;
+            max-width: 700px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        /* Header Styles */
+        .chat-header {
+            background-color: #0078d4;
+            color: white;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 18px;
+        }
+        .room-id {
+            font-weight: bold;
+        }
+        
+        /* Message Display Area */
+        .chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        /* Message Styles */
+        .message {
+            max-width: 70%;
+            padding: 10px;
+            border-radius: 12px;
+            word-wrap: break-word;
+            font-size: 14px;
+        }
+        .message.sent {
+            background-color: #0078d4;
+            color: white;
+            align-self: flex-end;
+        }
+        .message.received {
+            background-color: #f1f1f1;
+            color: #333;
+            align-self: flex-start;
+        }
+
+        /* Input Area */
+        .message-input {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #ddd;
+        }
+        .message-input input {
+            flex-grow: 1;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            outline: none;
+        }
+        .message-input button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            margin-left: 10px;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        .message-input button:hover {
+            background-color: #005f9e;
+        }
+
+        /* Room Creation */
+        .room-actions {
+            display: flex;
+            justify-content: center;
+            padding: 10px;
+            gap: 15px;
+        }
+        .room-actions button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .room-actions button:hover {
+            background-color: #005f9e;
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            display: none;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0078d4;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsiveness */
+        @media (max-width: 768px) {
+            .chat-container {
+                width: 100%;
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Chat Interface -->
+    <div class="chat-container">
+        <div class="chat-header">
+            <span class="room-id" id="roomIdDisplay">Room: Not Joined</span>
+            <button id="createRoomButton">Create Room</button>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div class="loading-spinner" id="loadingSpinner"></div>
+
+        <!-- Chat Box -->
+        <div class="chat-box" id="chatBox"></div>
+
+        <!-- Message Input Area -->
+        <div class="message-input">
+            <input type="text" id="messageInput" placeholder="Type your message..." />
+            <button id="sendMessageButton">Send</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import necessary Firebase SDKs
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, FieldValue } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+
+        // Your Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAzGA9hC8LeuLMUPDnUhm1QHZksW4Ps0wQ",
+            authDomain: "chatify-434d4.firebaseapp.com",
+            databaseURL: "https://chatify-434d4-default-rtdb.firebaseio.com",
+            projectId: "chatify-434d4",
+            storageBucket: "chatify-434d4.firebasestorage.app",
+            messagingSenderId: "715130171612",
+            appId: "1:715130171612:web:702df9e463463f8c7ac419",
+            measurementId: "G-FXC6PJQ8NE"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let currentRoomId = null;
+
+        // Function to create a new chat room
+        const createRoom = async () => {
+            const loadingSpinner = document.getElementById("loadingSpinner");
+            loadingSpinner.style.display = "block"; // Show loading spinner
+            try {
+                const roomRef = await addDoc(collection(db, "chat_rooms"), {
+                    createdAt: FieldValue.serverTimestamp(),
+                });
+                currentRoomId = roomRef.id;
+                document.getElementById("roomIdDisplay").textContent = `Room ID: ${currentRoomId}`;
+                listenForMessages();
+            } catch (error) {
+                console.error("Error creating room: ", error);
+            } finally {
+                loadingSpinner.style.display = "none"; // Hide loading spinner
+            }
+        };
+
+        // Function to send a message
+        const sendMessage = async () => {
+            const messageInput = document.getElementById("messageInput");
+            const messageContent = messageInput.value.trim();
+            if (messageContent && currentRoomId) {
+                const message = {
+                    sender: "User",
+                    content: messageContent,
+                    timestamp: FieldValue.serverTimestamp(),
+                };
+                try {
+                    await addDoc(collection(db, "chat_rooms", currentRoomId, "messages"), message);
+                    messageInput.value = ''; // Clear input field
+                } catch (error) {
+                    console.error("Error sending message: ", error);
+                }
+            }
+        };
+
+        // Function to listen for new messages in the room
+        const listenForMessages = () => {
+            const chatBox = document.getElementById("chatBox");
+            chatBox.innerHTML = ''; // Clear existing messages
+            const messagesRef = collection(db, "chat_rooms", currentRoomId, "messages");
+
+            onSnapshot(messagesRef, (querySnapshot) => {
+                querySnapshot.forEach((doc) => {
+                    const message = doc.data();
+                    const messageElement = document.createElement("div");
+                    messageElement.classList.add("message", message.sender === "User" ? "sent" : "received");
+                    messageElement.textContent = message.content;
+                    chatBox.appendChild(messageElement);
+                });
+
+                chatBox.scrollTop = chatBox.scrollHeight; // Scroll to bottom
+            });
+        };
+
+        // Event Listeners
+        document.getElementById("createRoomButton").addEventListener("click", createRoom);
+        document.getElementById("sendMessageButton").addEventListener("click", sendMessage);
+    </script>
+</body>
+</html>
